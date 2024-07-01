@@ -20,9 +20,22 @@ size_t TCPConnection::unassembled_bytes() const { return {}; }
 
 size_t TCPConnection::time_since_last_segment_received() const { return {}; }
 
-void TCPConnection::segment_received(const TCPSegment &seg) { DUMMY_CODE(seg); }
+void TCPConnection::segment_received(const TCPSegment &seg) {
+    if (seg.header().rst) {
+        // If rst, set both the inbound and outbound streams to the error
+        // state and kills the connection permanently
+        end_input_stream();
+        return;
+    }
+    _receiver.segment_received(seg);
+    if (seg.header().ack) {
+        _sender.ack_received(seg.header().ackno, _receiver.window_size());
+    }
+}
 
-bool TCPConnection::active() const { return {}; }
+bool TCPConnection::active() const {
+    return is_alive;
+}
 
 size_t TCPConnection::write(const string &data) {
     DUMMY_CODE(data);
@@ -32,7 +45,12 @@ size_t TCPConnection::write(const string &data) {
 //! \param[in] ms_since_last_tick number of milliseconds since the last call to this method
 void TCPConnection::tick(const size_t ms_since_last_tick) { DUMMY_CODE(ms_since_last_tick); }
 
-void TCPConnection::end_input_stream() {}
+void TCPConnection::end_input_stream() {
+    // Sender's byte stream is outbound stream
+    inbound_stream().set_error();
+    _sender.stream_in().set_error();
+    is_alive = false;
+}
 
 void TCPConnection::connect() {}
 
