@@ -5,22 +5,27 @@
 #include "tcp_receiver.hh"
 #include "tcp_sender.hh"
 #include "tcp_state.hh"
+#include <random>
 
 //! \brief A complete endpoint of a TCP connection
 class TCPConnection {
   private:
+    bool _unclean_shundown = false;
     TCPConfig _cfg;
     TCPReceiver _receiver{_cfg.recv_capacity};
     TCPSender _sender{_cfg.send_capacity, _cfg.rt_timeout, _cfg.fixed_isn};
-
+    size_t _time_since_last_segment_received {0};
     //! outbound queue of segments that the TCPConnection wants sent
     std::queue<TCPSegment> _segments_out{};
-
+    bool send_segment();
     //! Should the TCPConnection stay active (and keep ACKing)
     //! for 10 * _cfg.rt_timeout milliseconds after both streams have ended,
     //! in case the remote TCPConnection doesn't know we've received its whole stream?
     bool _linger_after_streams_finish{true};
     bool is_alive = false;
+    WrappingInt32 _isn {0};
+    bool check_inbound();
+    bool check_outbound();
   public:
     //! \name "Input" interface for the writer
     //!@{
@@ -46,6 +51,7 @@ class TCPConnection {
     ByteStream &inbound_stream() { return _receiver.stream_out(); }
     //!@}
 
+    ByteStream &outbound_stream() { return _sender.stream_in(); }
     //! \name Accessors used for testing
 
     //!@{
